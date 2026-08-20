@@ -1,12 +1,12 @@
 /*
  * veldy-contact.js — local (non-Framer) enhancements
- * 1. Adds a "Contact" item to the footer social row (cloned from the Kakao link so it
- *    matches the site style) that opens a contact popup.
- * 2. The popup shows the email and opens Gmail compose when clicked.
- * 3. Fixes the broken email link (https://veldy.official@gmail.com) to open Gmail.
  *
- * Runs after Framer hydration (static export = full page loads, no SPA re-render),
- * and re-applies a couple of times to be safe.
+ * "Contact" is rendered as an independent overlay element that is NOT part of
+ * Framer's DOM (so Framer's responsive re-renders can never delete it), yet is
+ * positioned to sit right after the footer "Kakao" link and styled to match the
+ * footer links — so it looks like a natural part of the footer ("Instagram, Blog,
+ * Kakao, Contact"). Clicking it opens a contact popup (email / Gmail compose).
+ * Also fixes the broken contact-page email link so it opens Gmail.
  */
 (function () {
   var EMAIL = 'veldy.official@gmail.com';
@@ -16,7 +16,15 @@
   function ensureStyle() {
     if (document.getElementById('veldy-contact-style')) return;
     var css =
-      '.vc-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;' +
+      /* independent Contact link, positioned to match the footer social links */
+      '#vc-contact{position:absolute;z-index:2147483000;margin:0;padding:0;cursor:pointer;' +
+      'font-family:"Inter Display","Inter Display Placeholder",sans-serif;font-size:14px;font-weight:600;' +
+      'line-height:17px;letter-spacing:0;white-space:pre;text-decoration:none;' +
+      'color:var(--token-af1df47b-ea84-448e-bdf0-a5ce0f875a59,#999);' +
+      '-webkit-font-smoothing:antialiased;transition:color .2s ease}' +
+      '#vc-contact:hover{color:var(--token-9811e40b-3ed8-4237-98e5-61535bb22d2f,#fff)}' +
+      /* popup */
+      '.vc-overlay{position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;' +
       'background:rgba(0,0,0,.66);opacity:0;transition:opacity .18s ease;padding:20px}' +
       '.vc-overlay.vc-open{opacity:1}' +
       '.vc-card{position:relative;width:100%;max-width:360px;background:#111;border:1px solid rgba(255,255,255,.12);' +
@@ -41,7 +49,7 @@
     var s = document.createElement('style');
     s.id = 'veldy-contact-style';
     s.textContent = css;
-    document.head.appendChild(s);
+    (document.head || document.documentElement).appendChild(s);
   }
 
   var overlay = null;
@@ -64,86 +72,61 @@
       '<span class="vc-copied">복사됨</span>' +
       '</div>';
     document.body.appendChild(overlay);
-
-    function close() { overlay.classList.remove('vc-open'); document.removeEventListener('keydown', onKey); setTimeout(function(){ overlay.style.display = 'none'; }, 200); }
+    function close() { overlay.classList.remove('vc-open'); document.removeEventListener('keydown', onKey); setTimeout(function () { overlay.style.display = 'none'; }, 200); }
     function onKey(e) { if (e.key === 'Escape') close(); }
-    overlay._open = function () { overlay.style.display = 'flex'; document.addEventListener('keydown', onKey); requestAnimationFrame(function(){ overlay.classList.add('vc-open'); }); };
-    overlay._close = close;
+    overlay._open = function () { overlay.style.display = 'flex'; document.addEventListener('keydown', onKey); requestAnimationFrame(function () { overlay.classList.add('vc-open'); }); };
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
     overlay.querySelector('.vc-close').addEventListener('click', close);
     overlay.querySelector('[data-vc-copy]').addEventListener('click', function () {
-      var done = function () { var t = overlay.querySelector('.vc-copied'); t.classList.add('vc-show'); setTimeout(function(){ t.classList.remove('vc-show'); }, 1400); };
+      var done = function () { var t = overlay.querySelector('.vc-copied'); t.classList.add('vc-show'); setTimeout(function () { t.classList.remove('vc-show'); }, 1400); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(EMAIL).then(done, done); else done();
     });
     overlay.style.display = 'none';
     return overlay;
   }
-
   function openPopup(e) { if (e) { e.preventDefault(); e.stopPropagation(); } buildPopup()._open(); }
 
-  // Rebuild the rolling-text letters of a cloned social link to a new label.
-  function relabel(anchor, label) {
-    var ps = anchor.querySelectorAll('p[class*="rolling-text-inner"]');
-    if (!ps.length) {
-      // fallback: plain text
-      anchor.textContent = label;
-      return;
+  function getEl() {
+    var el = document.getElementById('vc-contact');
+    if (!el) {
+      ensureStyle();
+      el = document.createElement('a');
+      el.id = 'vc-contact';
+      el.setAttribute('role', 'button');
+      el.setAttribute('data-vc-contact', '1');
+      el.textContent = 'Contact';
+      el.addEventListener('click', openPopup);
+      document.body.appendChild(el);
     }
-    ps.forEach(function (p) {
-      var tmpl = p.querySelector('span');
-      var spanStyle = tmpl ? tmpl.getAttribute('style') : '';
-      p.innerHTML = '';
-      for (var i = 0; i < label.length; i++) {
-        var sp = document.createElement('span');
-        if (spanStyle) sp.setAttribute('style', spanStyle);
-        sp.textContent = label[i];
-        p.appendChild(sp);
-      }
-    });
+    return el;
   }
 
-  // append a separator (comma) span to each rolling-text line, matching the site's
-  // convention where every social item except the last carries a trailing comma.
-  function appendComma(anchor) {
-    anchor.querySelectorAll('p[class*="rolling-text-inner"]').forEach(function (p) {
-      var tmpl = p.querySelector('span');
-      var sp = document.createElement('span');
-      if (tmpl) sp.setAttribute('style', tmpl.getAttribute('style') || '');
-      sp.textContent = ', '; // comma + non-breaking space to match "Instagram, Blog, Kakao"
-      p.appendChild(sp);
-    });
+  // Find the currently visible footer "Kakao" link (there can be one per breakpoint).
+  function visibleKakao() {
+    var list = document.querySelectorAll('a.framer-12fazzh');
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (!/pf\.kakao\.com/.test(a.getAttribute('href') || '')) continue;
+      var r = a.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) return a;
+    }
+    return null;
   }
 
-  function addContactAfter(kakao) {
-    var container = kakao.parentElement;
-    if (!container) return;
-    if (container.querySelector('[data-vc-contact]')) return; // already added (idempotent)
-
-    // Kakao is no longer the last item -> give it a trailing comma to match siblings.
-    if (!kakao.hasAttribute('data-vc-comma')) { kakao.setAttribute('data-vc-comma', '1'); appendComma(kakao); }
-
-    var clone = kakao.cloneNode(true);
-    clone.removeAttribute('data-vc-comma');
-    clone.setAttribute('data-vc-contact', '1');
-    clone.setAttribute('data-framer-name', 'Contact');
-    clone.removeAttribute('href');
-    clone.removeAttribute('target');
-    clone.style.cursor = 'pointer';
-    relabel(clone, 'Contact');
-    clone.addEventListener('click', openPopup);
-    if (kakao.nextSibling) container.insertBefore(clone, kakao.nextSibling);
-    else container.appendChild(clone);
-  }
-
-  function addFooterContact() {
-    // footer social links share the class framer-12fazzh; handle every Kakao instance
-    // (there can be one per responsive breakpoint variant).
-    var socials = document.querySelectorAll('a.framer-12fazzh');
-    var found = false;
-    socials.forEach(function (a) {
-      if (/pf\.kakao\.com/.test(a.getAttribute('href') || '')) { found = true; addContactAfter(a); }
-    });
-    return found;
+  // Anchor the Contact overlay right after Kakao, in document coordinates so it
+  // scrolls naturally with the footer.
+  function position() {
+    var kakao = visibleKakao();
+    var el = getEl();
+    if (!kakao) { el.style.display = 'none'; return; }
+    var r = kakao.getBoundingClientRect();
+    el.style.display = 'block';
+    el.style.height = r.height + 'px';
+    el.style.lineHeight = r.height + 'px';
+    // Place Contact on a new line directly under the social row, right-aligned to the
+    // row's right edge (where Kakao ends) so it never overflows the viewport.
+    el.style.top = (r.bottom + window.scrollY + 4) + 'px';
+    el.style.left = (r.right + window.scrollX - el.offsetWidth) + 'px';
   }
 
   function fixEmailLinks() {
@@ -154,41 +137,27 @@
     });
   }
 
-  function apply() { try { addFooterContact(); fixEmailLinks(); } catch (e) {} }
-
-  // Cheap check so the observer can early-out on unrelated DOM mutations:
-  // is there a footer Kakao link that is missing its Contact sibling, or a broken email link?
-  function needsWork() {
-    var ks = document.querySelectorAll('a.framer-12fazzh[href*="pf.kakao.com"]');
-    for (var i = 0; i < ks.length; i++) {
-      var c = ks[i].parentElement;
-      if (c && !c.querySelector('[data-vc-contact]')) return true;
-    }
-    return !!document.querySelector('a[href="' + BROKEN + '"], a[href="' + BROKEN + '/"]');
+  var pending = false;
+  function apply() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(function () { pending = false; try { position(); fixEmailLinks(); } catch (e) {} });
   }
 
   function schedule() {
     window.__vcLoaded = true;
     apply();
-    setTimeout(apply, 400);
-    setTimeout(apply, 1200);
-    setTimeout(apply, 2600);
-
-    // Framer re-renders the footer whenever the responsive breakpoint changes
-    // (initial hydration pass, window resize, phone rotation), which deletes our
-    // injected Contact link. Re-inject synchronously in the observer callback —
-    // MutationObserver runs at microtask time, before the browser paints, so the
-    // Contact link is restored in the same frame and never visibly flickers.
-    try {
-      new MutationObserver(function () { if (needsWork()) apply(); })
-        .observe(document.body, { childList: true, subtree: true });
-    } catch (e) {}
+    // layout settles as fonts/images load, and Framer re-renders on hydration/resize
+    [120, 300, 600, 1000, 1600, 2600, 4000].forEach(function (t) { setTimeout(apply, t); });
     window.addEventListener('resize', apply);
     window.addEventListener('orientationchange', apply);
-    window.addEventListener('pageshow', apply);
+    window.addEventListener('load', apply);
+    // Re-anchor whenever Framer re-renders the footer (cheap: only repositions).
+    try { new MutationObserver(apply).observe(document.documentElement, { childList: true, subtree: true }); } catch (e) {}
+    // Keep it aligned during layout shifts we don't get events for.
+    if (window.ResizeObserver) { try { var ro = new ResizeObserver(apply); ro.observe(document.documentElement); } catch (e) {} }
   }
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') schedule();
   else window.addEventListener('DOMContentLoaded', schedule);
-  window.addEventListener('load', apply);
 })();
