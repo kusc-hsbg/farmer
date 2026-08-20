@@ -1,12 +1,12 @@
 /*
  * veldy-contact.js — local (non-Framer) enhancements
- * 1. Adds a "Contact" item to the footer social row (cloned from the Kakao link so it
- *    matches the site style) that opens a contact popup.
- * 2. The popup shows the email and opens Gmail compose when clicked.
- * 3. Fixes the broken email link (https://veldy.official@gmail.com) to open Gmail.
  *
- * Runs after Framer hydration (static export = full page loads, no SPA re-render),
- * and re-applies a couple of times to be safe.
+ * A standalone, fixed-position "Contact" button is planted directly on the page,
+ * completely independent of Framer's DOM. Framer re-renders its own tree on every
+ * responsive breakpoint change, which kept deleting anything injected into the
+ * footer; a body-level overlay is never touched, so it never flickers or disappears.
+ * Clicking it opens a contact popup with the email / Gmail compose link.
+ * Also fixes the broken contact-page email link so it opens Gmail.
  */
 (function () {
   var EMAIL = 'veldy.official@gmail.com';
@@ -16,7 +16,18 @@
   function ensureStyle() {
     if (document.getElementById('veldy-contact-style')) return;
     var css =
-      '.vc-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;' +
+      /* fixed Contact button (top-right, independent overlay) */
+      '#vc-fab{position:fixed;top:16px;right:16px;z-index:2147483000;' +
+      'display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 18px;' +
+      'border-radius:999px;background:#fff;color:#000;cursor:pointer;' +
+      'font-family:"Inter Display","Inter Display Placeholder",sans-serif;font-size:14px;font-weight:600;' +
+      'line-height:1;border:1px solid #fff;box-shadow:0 6px 22px rgba(0,0,0,.35);' +
+      '-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .15s ease,opacity .15s ease}' +
+      '#vc-fab:hover{transform:translateY(-1px);opacity:.9}' +
+      '#vc-fab svg{width:15px;height:15px;display:block}' +
+      '@media (max-width:809px){#vc-fab{top:12px;right:12px;height:36px;padding:0 15px;font-size:13px}}' +
+      /* popup */
+      '.vc-overlay{position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;' +
       'background:rgba(0,0,0,.66);opacity:0;transition:opacity .18s ease;padding:20px}' +
       '.vc-overlay.vc-open{opacity:1}' +
       '.vc-card{position:relative;width:100%;max-width:360px;background:#111;border:1px solid rgba(255,255,255,.12);' +
@@ -41,7 +52,7 @@
     var s = document.createElement('style');
     s.id = 'veldy-contact-style';
     s.textContent = css;
-    document.head.appendChild(s);
+    (document.head || document.documentElement).appendChild(s);
   }
 
   var overlay = null;
@@ -65,14 +76,14 @@
       '</div>';
     document.body.appendChild(overlay);
 
-    function close() { overlay.classList.remove('vc-open'); document.removeEventListener('keydown', onKey); setTimeout(function(){ overlay.style.display = 'none'; }, 200); }
+    function close() { overlay.classList.remove('vc-open'); document.removeEventListener('keydown', onKey); setTimeout(function () { overlay.style.display = 'none'; }, 200); }
     function onKey(e) { if (e.key === 'Escape') close(); }
-    overlay._open = function () { overlay.style.display = 'flex'; document.addEventListener('keydown', onKey); requestAnimationFrame(function(){ overlay.classList.add('vc-open'); }); };
+    overlay._open = function () { overlay.style.display = 'flex'; document.addEventListener('keydown', onKey); requestAnimationFrame(function () { overlay.classList.add('vc-open'); }); };
     overlay._close = close;
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
     overlay.querySelector('.vc-close').addEventListener('click', close);
     overlay.querySelector('[data-vc-copy]').addEventListener('click', function () {
-      var done = function () { var t = overlay.querySelector('.vc-copied'); t.classList.add('vc-show'); setTimeout(function(){ t.classList.remove('vc-show'); }, 1400); };
+      var done = function () { var t = overlay.querySelector('.vc-copied'); t.classList.add('vc-show'); setTimeout(function () { t.classList.remove('vc-show'); }, 1400); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(EMAIL).then(done, done); else done();
     });
     overlay.style.display = 'none';
@@ -81,69 +92,20 @@
 
   function openPopup(e) { if (e) { e.preventDefault(); e.stopPropagation(); } buildPopup()._open(); }
 
-  // Rebuild the rolling-text letters of a cloned social link to a new label.
-  function relabel(anchor, label) {
-    var ps = anchor.querySelectorAll('p[class*="rolling-text-inner"]');
-    if (!ps.length) {
-      // fallback: plain text
-      anchor.textContent = label;
-      return;
-    }
-    ps.forEach(function (p) {
-      var tmpl = p.querySelector('span');
-      var spanStyle = tmpl ? tmpl.getAttribute('style') : '';
-      p.innerHTML = '';
-      for (var i = 0; i < label.length; i++) {
-        var sp = document.createElement('span');
-        if (spanStyle) sp.setAttribute('style', spanStyle);
-        sp.textContent = label[i];
-        p.appendChild(sp);
-      }
-    });
-  }
-
-  // append a separator (comma) span to each rolling-text line, matching the site's
-  // convention where every social item except the last carries a trailing comma.
-  function appendComma(anchor) {
-    anchor.querySelectorAll('p[class*="rolling-text-inner"]').forEach(function (p) {
-      var tmpl = p.querySelector('span');
-      var sp = document.createElement('span');
-      if (tmpl) sp.setAttribute('style', tmpl.getAttribute('style') || '');
-      sp.textContent = ', '; // comma + non-breaking space to match "Instagram, Blog, Kakao"
-      p.appendChild(sp);
-    });
-  }
-
-  function addContactAfter(kakao) {
-    var container = kakao.parentElement;
-    if (!container) return;
-    if (container.querySelector('[data-vc-contact]')) return; // already added (idempotent)
-
-    // Kakao is no longer the last item -> give it a trailing comma to match siblings.
-    if (!kakao.hasAttribute('data-vc-comma')) { kakao.setAttribute('data-vc-comma', '1'); appendComma(kakao); }
-
-    var clone = kakao.cloneNode(true);
-    clone.removeAttribute('data-vc-comma');
-    clone.setAttribute('data-vc-contact', '1');
-    clone.setAttribute('data-framer-name', 'Contact');
-    clone.removeAttribute('href');
-    clone.removeAttribute('target');
-    clone.style.cursor = 'pointer';
-    relabel(clone, 'Contact');
-    clone.addEventListener('click', openPopup);
-    if (kakao.nextSibling) container.insertBefore(clone, kakao.nextSibling);
-    else container.appendChild(clone);
-  }
-
-  function addFooterContact() {
-    // footer social links share the class framer-12fazzh; handle every Kakao instance
-    // (there can be one per responsive breakpoint variant).
-    var socials = document.querySelectorAll('a.framer-12fazzh');
-    var found = false;
-    socials.forEach(function (a) {
-      if (/pf\.kakao\.com/.test(a.getAttribute('href') || '')) { found = true; addContactAfter(a); }
-    });
-    return found;
+  // Standalone fixed Contact button, planted on the page independent of Framer.
+  function createFab() {
+    if (document.getElementById('vc-fab')) return;
+    if (!document.body) return;
+    ensureStyle();
+    var fab = document.createElement('button');
+    fab.id = 'vc-fab';
+    fab.type = 'button';
+    fab.setAttribute('aria-label', 'Contact');
+    fab.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 6 8 6 8-6"/></svg>' +
+      '<span>Contact</span>';
+    fab.addEventListener('click', openPopup);
+    document.body.appendChild(fab);
   }
 
   function fixEmailLinks() {
@@ -154,38 +116,19 @@
     });
   }
 
-  function apply() { try { addFooterContact(); fixEmailLinks(); } catch (e) {} }
-
-  // Cheap check so the observer can early-out on unrelated DOM mutations:
-  // is there a footer Kakao link that is missing its Contact sibling, or a broken email link?
-  function needsWork() {
-    var ks = document.querySelectorAll('a.framer-12fazzh[href*="pf.kakao.com"]');
-    for (var i = 0; i < ks.length; i++) {
-      var c = ks[i].parentElement;
-      if (c && !c.querySelector('[data-vc-contact]')) return true;
-    }
-    return !!document.querySelector('a[href="' + BROKEN + '"], a[href="' + BROKEN + '/"]');
-  }
+  function apply() { try { createFab(); fixEmailLinks(); } catch (e) {} }
 
   function schedule() {
     window.__vcLoaded = true;
     apply();
-    setTimeout(apply, 400);
-    setTimeout(apply, 1200);
-    setTimeout(apply, 2600);
-
-    // Framer re-renders the footer whenever the responsive breakpoint changes
-    // (initial hydration pass, window resize, phone rotation), which deletes our
-    // injected Contact link. Re-inject synchronously in the observer callback —
-    // MutationObserver runs at microtask time, before the browser paints, so the
-    // Contact link is restored in the same frame and never visibly flickers.
+    setTimeout(apply, 500);
+    setTimeout(apply, 1500);
+    // Re-plant the button if anything ever removes it (it lives outside Framer's tree,
+    // so this is just a cheap safety net).
     try {
-      new MutationObserver(function () { if (needsWork()) apply(); })
-        .observe(document.body, { childList: true, subtree: true });
+      new MutationObserver(function () { if (!document.getElementById('vc-fab')) createFab(); if (document.querySelector('a[href="' + BROKEN + '"]')) fixEmailLinks(); })
+        .observe(document.documentElement, { childList: true, subtree: true });
     } catch (e) {}
-    window.addEventListener('resize', apply);
-    window.addEventListener('orientationchange', apply);
-    window.addEventListener('pageshow', apply);
   }
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') schedule();
