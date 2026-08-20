@@ -109,7 +109,7 @@
       var tmpl = p.querySelector('span');
       var sp = document.createElement('span');
       if (tmpl) sp.setAttribute('style', tmpl.getAttribute('style') || '');
-      sp.textContent = ',';
+      sp.textContent = ', '; // comma + non-breaking space to match "Instagram, Blog, Kakao"
       p.appendChild(sp);
     });
   }
