@@ -156,6 +156,17 @@
 
   function apply() { try { addFooterContact(); fixEmailLinks(); } catch (e) {} }
 
+  // Cheap check so the observer can early-out on unrelated DOM mutations:
+  // is there a footer Kakao link that is missing its Contact sibling, or a broken email link?
+  function needsWork() {
+    var ks = document.querySelectorAll('a.framer-12fazzh[href*="pf.kakao.com"]');
+    for (var i = 0; i < ks.length; i++) {
+      var c = ks[i].parentElement;
+      if (c && !c.querySelector('[data-vc-contact]')) return true;
+    }
+    return !!document.querySelector('a[href="' + BROKEN + '"], a[href="' + BROKEN + '/"]');
+  }
+
   function schedule() {
     window.__vcLoaded = true;
     apply();
@@ -165,10 +176,13 @@
 
     // Framer re-renders the footer whenever the responsive breakpoint changes
     // (initial hydration pass, window resize, phone rotation), which deletes our
-    // injected Contact link. Watch for DOM changes and re-inject as needed.
-    var raf = null;
-    function nudge() { if (raf) return; raf = requestAnimationFrame(function () { raf = null; apply(); }); }
-    try { new MutationObserver(nudge).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+    // injected Contact link. Re-inject synchronously in the observer callback —
+    // MutationObserver runs at microtask time, before the browser paints, so the
+    // Contact link is restored in the same frame and never visibly flickers.
+    try {
+      new MutationObserver(function () { if (needsWork()) apply(); })
+        .observe(document.body, { childList: true, subtree: true });
+    } catch (e) {}
     window.addEventListener('resize', apply);
     window.addEventListener('orientationchange', apply);
     window.addEventListener('pageshow', apply);
