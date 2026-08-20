@@ -86,47 +86,82 @@
   }
   function openPopup(e) { if (e) { e.preventDefault(); e.stopPropagation(); } buildPopup()._open(); }
 
-  function getEl() {
+  function visible(a) { var r = a.getBoundingClientRect(); return r.width > 0 && r.height > 0; }
+
+  // replace the visible text ("kakao") of a cloned row with a new label
+  function relabelText(root, label) {
+    [].forEach.call(root.querySelectorAll('*'), function (n) {
+      if (n.childElementCount === 0 && /^kakao$/i.test((n.textContent || '').trim())) n.textContent = label;
+    });
+  }
+
+  // Build the Contact element once. On contact.html we clone the "Primary" kakao row
+  // so the arrow, divider line and typography match exactly; elsewhere we use a simple
+  // styled link matching the footer social row.
+  function getEl(mode, anchor) {
     var el = document.getElementById('vc-contact');
-    if (!el) {
-      ensureStyle();
+    if (el) return el;
+    ensureStyle();
+    if (mode === 'primary' && anchor) {
+      el = anchor.cloneNode(true);
+      el.removeAttribute('href');
+      el.removeAttribute('target');
+      el.removeAttribute('data-framer-appear-id');
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+      [].forEach.call(el.querySelectorAll('[data-framer-appear-id]'), function (n) {
+        n.removeAttribute('data-framer-appear-id'); n.style.opacity = '1'; n.style.transform = 'none';
+      });
+      relabelText(el, 'Contact');
+    } else {
       el = document.createElement('a');
-      el.id = 'vc-contact';
-      el.setAttribute('role', 'button');
-      el.setAttribute('data-vc-contact', '1');
       el.textContent = 'Contact';
-      el.addEventListener('click', openPopup);
-      document.body.appendChild(el);
     }
+    el.id = 'vc-contact';
+    el.setAttribute('role', 'button');
+    el.setAttribute('data-vc-contact', '1');
+    el.style.position = 'absolute';
+    el.style.zIndex = '2147483000';
+    el.style.margin = '0';
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', openPopup);
+    document.body.appendChild(el);
     return el;
   }
 
-  // Find the currently visible footer "Kakao" link (there can be one per breakpoint).
-  function visibleKakao() {
-    var list = document.querySelectorAll('a.framer-12fazzh');
-    for (var i = 0; i < list.length; i++) {
-      var a = list[i];
-      if (!/pf\.kakao\.com/.test(a.getAttribute('href') || '')) continue;
-      var r = a.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) return a;
-    }
+  // Pick the Kakao link to sit under. On contact.html the prominent contact-section
+  // list (Instagram / email / phone / kakao, "Primary" links) takes priority; on the
+  // other pages we fall back to the footer social row.
+  function findAnchor() {
+    var prim = [].slice.call(document.querySelectorAll('a[href*="pf.kakao.com"][data-framer-name="Primary"]')).filter(visible)[0];
+    if (prim) return { el: prim, mode: 'primary' };
+    var foot = [].slice.call(document.querySelectorAll('a.framer-12fazzh[href*="pf.kakao.com"]')).filter(visible)[0];
+    if (foot) return { el: foot, mode: 'footer' };
     return null;
   }
 
-  // Anchor the Contact overlay right after Kakao, in document coordinates so it
-  // scrolls naturally with the footer.
+  // Anchor the Contact overlay on a new line directly under Kakao, in document
+  // coordinates so it scrolls naturally with the page.
   function position() {
-    var kakao = visibleKakao();
-    var el = getEl();
-    if (!kakao) { el.style.display = 'none'; return; }
-    var r = kakao.getBoundingClientRect();
+    var a = findAnchor();
+    if (!a) { var ex = document.getElementById('vc-contact'); if (ex) ex.style.display = 'none'; return; }
+    var el = getEl(a.mode, a.el);
+    var r = a.el.getBoundingClientRect();
     el.style.display = 'block';
-    el.style.height = r.height + 'px';
-    el.style.lineHeight = r.height + 'px';
-    // Place Contact on a new line directly under the social row, right-aligned to the
-    // row's right edge (where Kakao ends) so it never overflows the viewport.
-    el.style.top = (r.bottom + window.scrollY + 4) + 'px';
-    el.style.left = (r.right + window.scrollX - el.offsetWidth) + 'px';
+    if (a.mode === 'primary') {
+      // cloned Primary row already carries the arrow, divider and typography.
+      el.style.width = r.width + 'px';
+      el.style.top = (r.bottom + window.scrollY + 10) + 'px';
+      el.style.left = (r.left + window.scrollX) + 'px';
+    } else {
+      // match the footer social row: 14px, grey, right-aligned so it can't overflow
+      el.style.height = r.height + 'px';
+      el.style.lineHeight = r.height + 'px';
+      el.style.fontSize = '14px';
+      el.style.color = 'var(--token-af1df47b-ea84-448e-bdf0-a5ce0f875a59,#999)';
+      el.style.top = (r.bottom + window.scrollY + 4) + 'px';
+      el.style.left = (r.right + window.scrollX - el.offsetWidth) + 'px';
+    }
   }
 
   function fixEmailLinks() {
