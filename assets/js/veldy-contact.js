@@ -157,11 +157,21 @@
   function apply() { try { addFooterContact(); fixEmailLinks(); } catch (e) {} }
 
   function schedule() {
+    window.__vcLoaded = true;
     apply();
-    // re-apply after hydration settles / in case Framer replaced the footer
     setTimeout(apply, 400);
     setTimeout(apply, 1200);
     setTimeout(apply, 2600);
+
+    // Framer re-renders the footer whenever the responsive breakpoint changes
+    // (initial hydration pass, window resize, phone rotation), which deletes our
+    // injected Contact link. Watch for DOM changes and re-inject as needed.
+    var raf = null;
+    function nudge() { if (raf) return; raf = requestAnimationFrame(function () { raf = null; apply(); }); }
+    try { new MutationObserver(nudge).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
+    window.addEventListener('pageshow', apply);
   }
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') schedule();
