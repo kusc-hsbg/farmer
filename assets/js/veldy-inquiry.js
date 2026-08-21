@@ -163,6 +163,19 @@
       document.addEventListener('click', function (e) {
         var t = e.target && e.target.closest ? e.target.closest(TRIGGER) : null;
         if (!t) return;
+        // Exception: the hero "Contact" primary button links to the contact page
+        // instead of opening the form. Read the rolling-text letter spans (not
+        // textContent, which also contains the button's inline <style>) so it is
+        // distinguished from the other primary button labelled "Get in touch".
+        if (t.matches && t.matches('a.framer-znJo4')) {
+          var pr = t.querySelector('p[class*="rolling-text-inner"]');
+          var label = pr ? [].map.call(pr.querySelectorAll('span'), function (s) { return s.textContent; }).join('').replace(/\s+/g, '').toLowerCase() : '';
+          if (label === 'contact') {
+            e.preventDefault(); e.stopPropagation();
+            window.location.href = 'https://kusc-hsbg.github.io/farmer/contact.html';
+            return;
+          }
+        }
         e.preventDefault(); e.stopPropagation();
         open();
       }, true);
