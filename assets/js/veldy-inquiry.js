@@ -227,14 +227,18 @@
 
       if (sendBtn) { sendBtn.disabled = true; sendBtn.dataset.label = sendBtn.dataset.label || sendBtn.textContent; sendBtn.textContent = '보내는 중…'; }
 
+      console.log('[vldy] sending via Web3Forms', payload);
       fetch('https://api.web3forms.com/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify(payload)
       })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (!(data && data.success === true)) throw new Error('send failed');
+        .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
+        .then(function (res) {
+          console.log('[vldy] Web3Forms response', res.status, res.data);
+          if (!(res.data && res.data.success === true)) {
+            throw new Error((res.data && res.data.message) || ('HTTP ' + res.status));
+          }
           if (sendBtn) sendBtn.textContent = '전송 완료 ✓';
           if (errBox) errBox.classList.remove('show');
           setTimeout(function () {
@@ -244,9 +248,13 @@
             close();
           }, 1300);
         })
-        .catch(function () {
+        .catch(function (err) {
+          console.error('[vldy] Web3Forms send failed:', err);
           if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = sendBtn.dataset.label || 'Send'; }
-          if (errBox) { errBox.textContent = '전송에 실패했습니다. 잠시 후 다시 시도해 주세요.'; errBox.classList.add('show'); }
+          if (errBox) {
+            errBox.textContent = '전송에 실패했습니다: ' + (err && err.message ? err.message : '알 수 없는 오류') + ' — 잠시 후 다시 시도해 주세요.';
+            errBox.classList.add('show');
+          }
         });
     });
   }
