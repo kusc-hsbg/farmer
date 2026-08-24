@@ -6,7 +6,8 @@
  * modal whenever a "Contact" affordance is clicked (the contact-page trigger
  * row, the footer/overlay Contact link #vc-contact, any nav/footer link to
  * contact.html, or anything with [data-vldy-open] / href="#vldy-inquiry").
- * Submitting composes the answers into a Gmail compose window (mailto fallback).
+ * Submitting posts the answers to FormSubmit (formsubmit.co) via AJAX, which
+ * delivers them straight to the inbox — one click, no Gmail compose step.
  */
 (function () {
   var TO = 'veldy.official@gmail.com';
@@ -33,14 +34,10 @@
 .vldy-checks{display:flex;flex-direction:column;gap:14px;border:1px solid transparent;border-radius:8px;padding:2px}
 .vldy-check{display:flex;align-items:center;gap:12px;font-size:15px;color:#2a2a2a;cursor:pointer;user-select:none}
 .vldy-check input{width:20px;height:20px;accent-color:#b9a04f;cursor:pointer;flex:0 0 auto}
-.vldy-file{display:flex;align-items:center;gap:10px}
-.vldy-file-btn{display:inline-flex;align-items:center;gap:9px;cursor:pointer;color:#444;font-size:15px;padding:8px 4px}
-.vldy-file-btn:hover{color:#111}
-.vldy-file-btn .ic{font-size:17px}
-.vldy-file-name{font-size:13px;color:#8a8a8a}
 .vldy-send{width:100%;height:58px;margin-top:12px;border:none;border-radius:34px;background:#d8c36e;color:#2a2410;font-family:inherit;font-size:16px;font-weight:700;letter-spacing:.04em;cursor:pointer;transition:background .15s,transform .05s}
 .vldy-send:hover{background:#cdb85e}
 .vldy-send:active{transform:translateY(1px)}
+.vldy-send:disabled{opacity:.75;cursor:default;transform:none}
 .vldy-err{display:none;margin-top:14px;color:#e0322d;font-size:14px}
 .vldy-err.show{display:block}
 @media (max-width:680px){
@@ -97,14 +94,6 @@
       <div class="vldy-field">
         <label class="vldy-label" for="vf-detail">상세 내용</label>
         <textarea class="vldy-textarea" id="vf-detail" name="detail"></textarea>
-      </div>
-
-      <div class="vldy-field">
-        <div class="vldy-file">
-          <label class="vldy-file-btn" for="vf-file"><span class="ic">&#8679;</span><span>파일 올리기</span></label>
-          <input id="vf-file" type="file" style="display:none">
-          <span class="vldy-file-name" id="vf-file-name"></span>
-        </div>
       </div>
 
       <div class="vldy-field">
@@ -188,11 +177,6 @@
     if (closeBtn) closeBtn.addEventListener('click', close);
     overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(); });
 
-    var fileInput = document.getElementById('vf-file');
-    if (fileInput) fileInput.addEventListener('change', function () {
-      document.getElementById('vf-file-name').textContent = fileInput.files && fileInput.files[0] ? fileInput.files[0].name : '';
-    });
-
     function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
     function mark(el, bad) { if (!el) return; el.classList[bad ? 'add' : 'remove']('vldy-invalid'); }
 
@@ -215,39 +199,54 @@
       mark(document.getElementById('vf-areas'), !areasOk);
 
       if (!name || !phoneOk || !date || !budget || !areasOk) {
-        if (errBox) errBox.classList.add('show');
+        if (errBox) { errBox.textContent = '필수 항목(*)을 모두 입력해 주세요.'; errBox.classList.add('show'); }
         var firstBad = document.querySelector('.vldy-invalid'); if (firstBad && firstBad.focus) firstBad.focus();
         return;
       }
       if (errBox) errBox.classList.remove('show');
 
       var phone = p1 + '-' + p2 + '-' + p3;
-      var fileName = (fileInput && fileInput.files && fileInput.files[0]) ? fileInput.files[0].name : '';
-
       var subject = '[프로젝트 문의] ' + name;
-      var lines = [
-        '▪ 업종/상호명/성함: ' + name,
-        '▪ 연락처: ' + phone,
-        '▪ 희망하는 제작 완료 일정: ' + date,
-        '▪ 예산: ' + budget,
-        '▪ 의뢰 영역: ' + areas.join(', '),
-        '',
-        '▪ 상세 내용:',
-        (detail || '(없음)'),
-        '',
-        '▪ 문의하게 된 경로: ' + (source || '(없음)')
-      ];
-      if (fileName) { lines.push('', '▪ 첨부파일: ' + fileName + '  (Gmail 작성창에서 직접 첨부해 주세요)'); }
-      var body = lines.join('\n');
+      var sendBtn = form.querySelector('.vldy-send');
 
-      var su = encodeURIComponent(subject);
-      var bo = encodeURIComponent(body);
-      var gmail = 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(TO) + '&su=' + su + '&body=' + bo;
-      var mailto = 'mailto:' + TO + '?subject=' + su + '&body=' + bo;
+      // FormSubmit delivers the answers straight to the inbox, no compose step.
+      // _template:table gives a readable email; _captcha:false skips the redirect.
+      var payload = {
+        '업종/상호명/성함': name,
+        '연락처': phone,
+        '희망 제작 완료 일정': date,
+        '예산': budget,
+        '의뢰 영역': areas.join(', '),
+        '상세 내용': detail || '(없음)',
+        '문의하게 된 경로': source || '(없음)',
+        _subject: subject,
+        _template: 'table',
+        _captcha: 'false'
+      };
 
-      var w = window.open(gmail, '_blank');
-      if (!w) { window.location.href = mailto; }
-      close();
+      if (sendBtn) { sendBtn.disabled = true; sendBtn.dataset.label = sendBtn.dataset.label || sendBtn.textContent; sendBtn.textContent = '보내는 중…'; }
+
+      fetch('https://formsubmit.co/ajax/' + encodeURIComponent(TO), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+        .then(function (data) {
+          if (!(data && (data.success === true || data.success === 'true'))) throw new Error('send failed');
+          if (sendBtn) sendBtn.textContent = '전송 완료 ✓';
+          if (errBox) errBox.classList.remove('show');
+          setTimeout(function () {
+            form.reset();
+            mark(document.getElementById('vf-areas'), false);
+            if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = sendBtn.dataset.label || 'Send'; }
+            close();
+          }, 1300);
+        })
+        .catch(function () {
+          if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = sendBtn.dataset.label || 'Send'; }
+          if (errBox) { errBox.textContent = '전송에 실패했습니다. 잠시 후 다시 시도해 주세요.'; errBox.classList.add('show'); }
+        });
     });
   }
 
