@@ -6,11 +6,13 @@
  * modal whenever a "Contact" affordance is clicked (the contact-page trigger
  * row, the footer/overlay Contact link #vc-contact, any nav/footer link to
  * contact.html, or anything with [data-vldy-open] / href="#vldy-inquiry").
- * Submitting posts the answers to FormSubmit (formsubmit.co) via AJAX, which
- * delivers them straight to the inbox — one click, no Gmail compose step.
+ * Submitting posts the answers to Web3Forms (api.web3forms.com) via AJAX,
+ * which delivers them straight to the inbox — one click, no Gmail compose
+ * step. The access key below routes to veldy.official@gmail.com; it is a
+ * public front-end key (safe to ship in client code).
  */
 (function () {
-  var TO = 'veldy.official@gmail.com';
+  var WEB3FORMS_KEY = '6544f4af-fdb9-4152-920d-a9b2aeca91f2';
   var CSS = `#vldy-inquiry-overlay{position:fixed;inset:0;z-index:2147483000;display:none;align-items:flex-start;justify-content:center;background:rgba(20,20,20,.55);overflow-y:auto;padding:32px 16px;-webkit-overflow-scrolling:touch}
 #vldy-inquiry-overlay.vldy-open{display:flex}
 #vldy-inquiry-overlay *{box-sizing:border-box}
@@ -209,31 +211,30 @@
       var subject = '[프로젝트 문의] ' + name;
       var sendBtn = form.querySelector('.vldy-send');
 
-      // FormSubmit delivers the answers straight to the inbox, no compose step.
-      // _template:table gives a readable email; _captcha:false skips the redirect.
+      // Web3Forms delivers the answers straight to the inbox, no compose step.
       var payload = {
+        access_key: WEB3FORMS_KEY,
+        subject: subject,
+        from_name: name,
         '업종/상호명/성함': name,
         '연락처': phone,
         '희망 제작 완료 일정': date,
         '예산': budget,
         '의뢰 영역': areas.join(', '),
         '상세 내용': detail || '(없음)',
-        '문의하게 된 경로': source || '(없음)',
-        _subject: subject,
-        _template: 'table',
-        _captcha: 'false'
+        '문의하게 된 경로': source || '(없음)'
       };
 
       if (sendBtn) { sendBtn.disabled = true; sendBtn.dataset.label = sendBtn.dataset.label || sendBtn.textContent; sendBtn.textContent = '보내는 중…'; }
 
-      fetch('https://formsubmit.co/ajax/' + encodeURIComponent(TO), {
+      fetch('https://api.web3forms.com/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify(payload)
       })
-        .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+        .then(function (r) { return r.json(); })
         .then(function (data) {
-          if (!(data && (data.success === true || data.success === 'true'))) throw new Error('send failed');
+          if (!(data && data.success === true)) throw new Error('send failed');
           if (sendBtn) sendBtn.textContent = '전송 완료 ✓';
           if (errBox) errBox.classList.remove('show');
           setTimeout(function () {
